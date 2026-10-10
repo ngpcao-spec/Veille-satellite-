@@ -73,6 +73,7 @@ test("trueColorImage envoie le polygone et la journée, renvoie le PNG", async (
   const sent = JSON.parse(String(calls[1].init.body));
   assert.equal(sent.input.data[0].dataFilter.timeRange.from, "2026-10-06T00:00:00Z");
   assert.deepEqual(sent.input.bounds.geometry, poly);
+  assert.equal(sent.input.data[0].processing.upsampling, "BICUBIC");
 });
 
 test("une erreur Catalog inclut le message de Copernicus", async () => {
