@@ -25,6 +25,17 @@ export interface Credentials {
   clientSecret: string;
 }
 
+/** Date au format RFC 3339 sans fraction de seconde (ex. 2026-10-10T12:00:00Z). */
+function rfc3339(d: Date): string {
+  return d.toISOString().replace(/\.\d{3}Z$/, "Z");
+}
+
+/** Début du message d'erreur renvoyé par Copernicus (jamais d'identifiants dans ces réponses). */
+async function errorBody(res: Response): Promise<string> {
+  const text = (await res.text().catch(() => "")).replace(/\s+/g, " ").trim();
+  return text ? ` — ${text.slice(0, 300)}` : "";
+}
+
 // Le jeton expire vite : on le garde en mémoire du process jusqu'à ~30 s avant l'expiration.
 let cached: { token: string; expiresAt: number } | null = null;
 
@@ -59,10 +70,9 @@ export async function searchAcquisitions(
   const optical = opts.collection === "sentinel-2-l2a";
   const body: Record<string, unknown> = {
     collections: [opts.collection],
-    datetime: `${opts.from.toISOString()}/${opts.to.toISOString()}`,
+    datetime: `${rfc3339(opts.from)}/${rfc3339(opts.to)}`,
     intersects: geom,
     limit: opts.limit ?? 20,
-    fields: { include: ["id", "properties.datetime", ...(optical ? ["properties.eo:cloud_cover"] : [])] },
   };
   if (optical && opts.maxCloud !== undefined) {
     body["filter-lang"] = "cql2-text";
@@ -73,7 +83,7 @@ export async function searchAcquisitions(
     headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
     body: JSON.stringify(body),
   });
-  if (!res.ok) throw new CopernicusError(`Catalog API : ${res.status}`, res.status);
+  if (!res.ok) throw new CopernicusError(`Catalog API : ${res.status}${await errorBody(res)}`, res.status);
   const json = (await res.json()) as {
     features?: { id: string; properties: { datetime: string; "eo:cloud_cover"?: number } }[];
   };
@@ -124,6 +134,6 @@ export async function trueColorImage(
       evalscript: TRUE_COLOR,
     }),
   });
-  if (!res.ok) throw new CopernicusError(`Process API : ${res.status}`, res.status);
+  if (!res.ok) throw new CopernicusError(`Process API : ${res.status}${await errorBody(res)}`, res.status);
   return res.arrayBuffer();
 }

@@ -58,6 +58,7 @@ test("searchAcquisitions filtre les nuages, trie par date décroissante", async 
   assert.deepEqual(res.map((r) => r.id), ["b", "a"]);
   const sent = JSON.parse(String(calls[1].init.body));
   assert.equal(sent.filter, "eo:cloud_cover < 30");
+  assert.match(sent.datetime, /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z\/\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$/);
   assert.equal((calls[1].init.headers as Record<string, string>).Authorization, "Bearer tok");
 });
 
@@ -72,6 +73,18 @@ test("trueColorImage envoie le polygone et la journée, renvoie le PNG", async (
   const sent = JSON.parse(String(calls[1].init.body));
   assert.equal(sent.input.data[0].dataFilter.timeRange.from, "2026-10-06T00:00:00Z");
   assert.deepEqual(sent.input.bounds.geometry, poly);
+});
+
+test("une erreur Catalog inclut le message de Copernicus", async () => {
+  resetTokenCache();
+  const { f } = mockFetch({
+    "openid-connect/token": tokenRoute,
+    "catalog/1.0.0/search": () => new Response('{"message":"Invalid filter"}', { status: 400 }),
+  });
+  await assert.rejects(
+    searchAcquisitions(creds, poly, { collection: "sentinel-2-l2a", from: new Date(), to: new Date() }, f),
+    /Catalog API : 400 — \{"message":"Invalid filter"\}/,
+  );
 });
 
 test("identifiants absents : erreur explicite sans appel réseau", async () => {
