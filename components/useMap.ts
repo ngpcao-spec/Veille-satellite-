@@ -3,8 +3,11 @@ import { useEffect, useRef, useState } from "react";
 import * as maplibregl from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
 
-// Fond raster OpenStreetMap : léger et sans dépendance à un serveur de tuiles vectorielles.
-const BASE_STYLE: maplibregl.StyleSpecification = {
+// Fond principal : OpenFreeMap (vecteur, gratuit, sans clé).
+const BASEMAP = "https://tiles.openfreemap.org/styles/liberty";
+
+// Fond de secours si le style principal ne se charge pas : tuiles raster OpenStreetMap.
+const FALLBACK_STYLE: maplibregl.StyleSpecification = {
   version: 8,
   sources: {
     osm: {
@@ -12,18 +15,17 @@ const BASE_STYLE: maplibregl.StyleSpecification = {
       tiles: ["https://tile.openstreetmap.org/{z}/{x}/{y}.png"],
       tileSize: 256,
       maxzoom: 19,
-      attribution: "© OpenStreetMap © CARTO",
+      attribution: "© OpenStreetMap",
     },
   },
   layers: [{ id: "osm", type: "raster", source: "osm" }],
 };
 
-// Fond de secours si les tuiles OpenStreetMap sont refusées ou injoignables (limitation, blocage réseau…).
-const FALLBACK_TILES = ["a", "b", "c", "d"].map(
-  (s) => `https://${s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}.png`,
-);
-
-/** La carte est exposée dès que son style est chargé (« style.load »), sans attendre les tuiles. */
+/**
+ * La carte est exposée dès que son style est chargé (« style.load »), sans attendre toutes les tuiles.
+ * Avant ce moment, une erreur ne peut venir que du chargement du style : on bascule alors sur le fond de secours.
+ * (Après, on ne change plus de style : cela supprimerait les couches ajoutées par l'appli.)
+ */
 export function useMap(onReady?: (map: maplibregl.Map) => void) {
   const container = useRef<HTMLDivElement>(null);
   const [map, setMap] = useState<maplibregl.Map | null>(null);
@@ -36,27 +38,35 @@ export function useMap(onReady?: (map: maplibregl.Map) => void) {
     maplibregl.setWorkerUrl("/maplibre/maplibre-gl-worker.mjs");
     const m = new maplibregl.Map({
       container: container.current,
-      style: BASE_STYLE,
+      style: BASEMAP,
       center: [2.35, 46.6],
       zoom: 5,
     });
     m.addControl(new maplibregl.NavigationControl({ showCompass: false }), "top-right");
-    let tileErrors = 0;
-    let switched = false;
-    m.on("error", (e) => {
-      const { sourceId } = e as unknown as { sourceId?: string };
-      if (sourceId !== "osm" || switched) return;
-      tileErrors += 1;
-      if (tileErrors < 2) return;
-      switched = true;
-      console.warn("Tuiles OpenStreetMap indisponibles : bascule sur le fond de secours");
-      (m.getSource("osm") as maplibregl.RasterTileSource | undefined)?.setTiles(FALLBACK_TILES);
-    });
-    m.once("style.load", () => {
+
+    let ready = false;
+    let fellBack = false;
+    const markReady = () => {
+      if (ready) return;
+      ready = true;
+      clearTimeout(timer);
       setMap(m);
       cb.current?.(m);
-    });
-    return () => m.remove();
+    };
+    const fallback = () => {
+      if (ready || fellBack) return;
+      fellBack = true;
+      console.warn("Fond de carte principal indisponible : bascule sur OpenStreetMap");
+      m.setStyle(FALLBACK_STYLE);
+    };
+    const timer = setTimeout(fallback, 8000);
+    m.on("style.load", markReady);
+    m.on("error", fallback);
+
+    return () => {
+      clearTimeout(timer);
+      m.remove();
+    };
   }, []);
 
   return { container, map };
