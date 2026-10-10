@@ -1,0 +1,82 @@
+import { test } from "node:test";
+import assert from "node:assert/strict";
+import type { Polygon } from "geojson";
+import { getToken, resetTokenCache, searchAcquisitions, trueColorImage } from "../lib/copernicus";
+import { imageSize, polygonBBox } from "../lib/geo";
+
+const poly: Polygon = {
+  type: "Polygon",
+  coordinates: [[[2, 48], [2.02, 48], [2.02, 48.01], [2, 48.01], [2, 48]]],
+};
+
+process.env.COPERNICUS_CLIENT_ID = "id";
+process.env.COPERNICUS_CLIENT_SECRET = "secret";
+
+function mockFetch(routes: Record<string, (init: RequestInit) => Response>) {
+  const calls: { url: string; init: RequestInit }[] = [];
+  const f = (async (url: string, init: RequestInit = {}) => {
+    calls.push({ url, init });
+    const key = Object.keys(routes).find((k) => url.includes(k));
+    if (!key) throw new Error("route inattendue " + url);
+    return routes[key](init);
+  }) as unknown as typeof fetch;
+  return { f, calls };
+}
+const json = (o: unknown) => new Response(JSON.stringify(o), { headers: { "Content-Type": "application/json" } });
+const tokenRoute = () => json({ access_token: "tok", expires_in: 600 });
+
+test("imageSize respecte les proportions et le côté max", () => {
+  const { width, height } = imageSize(polygonBBox(poly));
+  assert.equal(Math.max(width, height), 512);
+  assert.ok(width > height); // 0.02° de long à 48°N (~1,5 km) vs 0.01° de haut (~1,1 km)
+});
+
+test("le jeton est mis en cache", async () => {
+  resetTokenCache();
+  const { f, calls } = mockFetch({ "openid-connect/token": tokenRoute });
+  assert.equal(await getToken(f), "tok");
+  assert.equal(await getToken(f), "tok");
+  assert.equal(calls.length, 1);
+});
+
+test("searchAcquisitions filtre les nuages, trie par date décroissante", async () => {
+  resetTokenCache();
+  const { f, calls } = mockFetch({
+    "openid-connect/token": tokenRoute,
+    "catalog/1.0.0/search": () =>
+      json({
+        features: [
+          { id: "a", properties: { datetime: "2026-10-01T10:00:00Z", "eo:cloud_cover": 12.4 } },
+          { id: "b", properties: { datetime: "2026-10-06T10:00:00Z", "eo:cloud_cover": 3 } },
+        ],
+      }),
+  });
+  const res = await searchAcquisitions(
+    poly,
+    { collection: "sentinel-2-l2a", from: new Date("2026-09-10"), to: new Date("2026-10-10"), maxCloud: 30 },
+    f,
+  );
+  assert.deepEqual(res.map((r) => r.id), ["b", "a"]);
+  const sent = JSON.parse(String(calls[1].init.body));
+  assert.equal(sent.filter, "eo:cloud_cover < 30");
+  assert.equal((calls[1].init.headers as Record<string, string>).Authorization, "Bearer tok");
+});
+
+test("trueColorImage envoie le polygone et la journée, renvoie le PNG", async () => {
+  resetTokenCache();
+  const { f, calls } = mockFetch({
+    "openid-connect/token": tokenRoute,
+    "/api/v1/process": () => new Response(new Uint8Array([137, 80, 78, 71])),
+  });
+  const png = await trueColorImage(poly, "2026-10-06", f);
+  assert.equal(png.byteLength, 4);
+  const sent = JSON.parse(String(calls[1].init.body));
+  assert.equal(sent.input.data[0].dataFilter.timeRange.from, "2026-10-06T00:00:00Z");
+  assert.deepEqual(sent.input.bounds.geometry, poly);
+});
+
+test("erreur d'authentification explicite", async () => {
+  resetTokenCache();
+  const { f } = mockFetch({ "openid-connect/token": () => new Response("no", { status: 401 }) });
+  await assert.rejects(getToken(f), /refusée \(401\)/);
+});
