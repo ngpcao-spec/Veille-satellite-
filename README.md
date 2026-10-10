@@ -5,7 +5,7 @@ PWA Next.js (Vercel) + Supabase (Auth Google, PostGIS, RLS). L'utilisateur dessi
 ## Avancement (plan de livraison)
 
 - [x] **1. Socle** : PWA, auth Google, schéma Postgres + RLS, carte MapLibre avec dessin de polygone, fiche zone
-- [ ] 2. Connexion Copernicus
+- [x] 2. Connexion Copernicus (client OAuth, Catalog, Process, dernière image sur la fiche zone)
 - [ ] 3. Référence et mesures
 - [ ] 4. Détection
 - [ ] 5. IA et alertes

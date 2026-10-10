@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import type { Polygon } from "geojson";
 import { createClient } from "@/lib/supabase/server";
 import ZoneMap from "@/components/ZoneMap";
+import LatestImage from "@/components/LatestImage";
 import { TYPES_SUIVIS } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
@@ -30,6 +31,10 @@ export default async function ZonePage({ params }: { params: Promise<{ id: strin
         {zone.derniere_verif_at ? ` · dernière vérification ${new Date(zone.derniere_verif_at).toLocaleString("fr-FR")}` : " · pas encore vérifiée"}
       </div>
       <ZoneMap geom={zone.geom as Polygon} />
+      <section>
+        <h2>Dernière image</h2>
+        <LatestImage zoneId={zone.id} geom={zone.geom as Polygon} />
+      </section>
       <section>
         <h2>Événements détectés</h2>
         {events?.length ? (
