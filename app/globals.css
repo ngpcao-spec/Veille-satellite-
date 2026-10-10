@@ -1,0 +1,28 @@
+:root { --bg:#f4f7f5; --fg:#14231c; --card:#fff; --line:#d9e2dd; --brand:#0b3d2e; --accent:#2f9e5b; --warn:#d98a1f; --alert:#c93a3a; }
+@media (prefers-color-scheme: dark) { :root { --bg:#0e1612; --fg:#e6efe9; --card:#17231d; --line:#2a3a31; } }
+* { box-sizing: border-box; }
+html, body { margin:0; height:100%; background:var(--bg); color:var(--fg); font:16px/1.45 system-ui, sans-serif; }
+a { color:inherit; }
+.center { min-height:100dvh; display:grid; place-content:center; gap:16px; padding:24px; text-align:center; max-width:480px; margin:auto; }
+.btn { border:1px solid var(--line); background:var(--card); color:var(--fg); padding:10px 16px; border-radius:10px; font:inherit; cursor:pointer; }
+.btn.primary { background:var(--brand); color:#fff; border-color:var(--brand); }
+.btn:disabled { opacity:.5; cursor:default; }
+.layout { display:grid; grid-template-columns:340px 1fr; height:100dvh; }
+.side { overflow:auto; padding:16px; border-right:1px solid var(--line); display:flex; flex-direction:column; gap:12px; }
+.side h1 { font-size:20px; margin:0; }
+.row { display:flex; gap:8px; align-items:center; justify-content:space-between; }
+.card { background:var(--card); border:1px solid var(--line); border-radius:12px; padding:12px; text-decoration:none; display:block; }
+.card .meta { font-size:13px; opacity:.7; }
+.dot { width:10px; height:10px; border-radius:50%; display:inline-block; margin-right:8px; background:var(--accent); }
+.dot.changement { background:var(--warn); } .dot.alerte { background:var(--alert); }
+.mapwrap { position:relative; height:100%; min-height:300px; }
+.mapwrap > div { position:absolute; inset:0; }
+form.zoneform { display:flex; flex-direction:column; gap:10px; }
+label { display:flex; flex-direction:column; gap:4px; font-size:14px; }
+input[type=text], select { padding:9px 10px; border-radius:8px; border:1px solid var(--line); background:var(--card); color:var(--fg); font:inherit; }
+.checks { display:flex; flex-direction:column; gap:4px; } .checks label { flex-direction:row; align-items:center; gap:8px; }
+.error { color:var(--alert); font-size:14px; } .muted { opacity:.7; font-size:14px; }
+.page { max-width:900px; margin:0 auto; padding:16px; display:flex; flex-direction:column; gap:16px; }
+.zonemap { height:360px; position:relative; border-radius:12px; overflow:hidden; border:1px solid var(--line); }
+.zonemap > div { position:absolute; inset:0; }
+@media (max-width: 800px) { .layout { grid-template-columns:1fr; grid-template-rows:55dvh 1fr; } .layout .mapwrap { order:-1; } .side { border-right:0; } }
