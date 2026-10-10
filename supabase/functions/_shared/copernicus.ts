@@ -1,5 +1,4 @@
-import type { Polygon } from "geojson";
-import { imageSize, polygonBBox } from "./geo";
+import { imageSize, polygonBBox, type Polygon } from "./geo.ts";
 
 const TOKEN_URL = "https://identity.dataspace.copernicus.eu/auth/realms/CDSE/protocol/openid-connect/token";
 const CATALOG_URL = "https://sh.dataspace.copernicus.eu/api/v1/catalog/1.0.0/search";
@@ -21,17 +20,18 @@ export class CopernicusError extends Error {
 
 type Fetch = typeof fetch;
 
-export function copernicusConfigured(): boolean {
-  return Boolean(process.env.COPERNICUS_CLIENT_ID && process.env.COPERNICUS_CLIENT_SECRET);
+export interface Credentials {
+  clientId: string;
+  clientSecret: string;
 }
 
 // Le jeton expire vite : on le garde en mémoire du process jusqu'à ~30 s avant l'expiration.
 let cached: { token: string; expiresAt: number } | null = null;
 
-export async function getToken(fetchImpl: Fetch = fetch): Promise<string> {
+export async function getToken(creds: Credentials, fetchImpl: Fetch = fetch): Promise<string> {
   if (cached && cached.expiresAt > Date.now()) return cached.token;
-  const id = process.env.COPERNICUS_CLIENT_ID;
-  const secret = process.env.COPERNICUS_CLIENT_SECRET;
+  const id = creds.clientId;
+  const secret = creds.clientSecret;
   if (!id || !secret) throw new CopernicusError("Identifiants Copernicus non configurés");
   const res = await fetchImpl(TOKEN_URL, {
     method: "POST",
@@ -50,11 +50,12 @@ export function resetTokenCache() {
 
 /** Catalog API : acquisitions récentes couvrant la zone, de la plus récente à la plus ancienne. */
 export async function searchAcquisitions(
+  creds: Credentials,
   geom: Polygon,
   opts: { collection: Collection; from: Date; to: Date; maxCloud?: number; limit?: number },
   fetchImpl: Fetch = fetch,
 ): Promise<Acquisition[]> {
-  const token = await getToken(fetchImpl);
+  const token = await getToken(creds, fetchImpl);
   const optical = opts.collection === "sentinel-2-l2a";
   const body: Record<string, unknown> = {
     collections: [opts.collection],
@@ -96,11 +97,12 @@ function evaluatePixel(s) {
 
 /** Process API : PNG en couleurs naturelles découpé sur le polygone, pour la journée donnée (YYYY-MM-DD). */
 export async function trueColorImage(
+  creds: Credentials,
   geom: Polygon,
   day: string,
   fetchImpl: Fetch = fetch,
 ): Promise<ArrayBuffer> {
-  const token = await getToken(fetchImpl);
+  const token = await getToken(creds, fetchImpl);
   const { width, height } = imageSize(polygonBBox(geom));
   const res = await fetchImpl(PROCESS_URL, {
     method: "POST",

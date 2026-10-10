@@ -5,7 +5,7 @@ PWA Next.js (Vercel) + Supabase (Auth Google, PostGIS, RLS). L'utilisateur dessi
 ## Avancement (plan de livraison)
 
 - [x] **1. Socle** : PWA, auth Google, schéma Postgres + RLS, carte MapLibre avec dessin de polygone, fiche zone
-- [x] 2. Connexion Copernicus (client OAuth, Catalog, Process, dernière image sur la fiche zone)
+- [x] 2. Connexion Copernicus (Edge Function Supabase `copernicus` : secrets côté Supabase uniquement ; dernière image sur la fiche zone)
 - [ ] 3. Référence et mesures
 - [ ] 4. Détection
 - [ ] 5. IA et alertes
@@ -24,3 +24,9 @@ Auth : activer le fournisseur Google dans Supabase (Authentication → Providers
 `<site>/auth/callback` aux URL de redirection autorisées.
 
 Ne jamais committer de clé : tout passe par les variables d'environnement Supabase / Vercel.
+
+## Secrets Copernicus
+
+`COPERNICUS_CLIENT_ID` et `COPERNICUS_CLIENT_SECRET` vivent uniquement dans Supabase (secrets des Edge Functions).
+L'appli Vercel n'en contient aucun : elle appelle la fonction `copernicus` avec le jeton de session de l'utilisateur.
+Déploiement de la fonction : `supabase functions deploy copernicus` (le code partagé est dans `supabase/functions/_shared`).
