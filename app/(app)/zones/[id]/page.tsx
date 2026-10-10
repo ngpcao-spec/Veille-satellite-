@@ -33,7 +33,7 @@ export default async function ZonePage({ params }: { params: Promise<{ id: strin
       <ZoneMap geom={zone.geom as Polygon} />
       <section>
         <h2>Dernière image</h2>
-        <LatestImage zoneId={zone.id} geom={zone.geom as Polygon} />
+        <LatestImage zoneId={zone.id} />
       </section>
       <section>
         <h2>Événements détectés</h2>

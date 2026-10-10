@@ -1,24 +1,17 @@
-import type { Polygon } from "geojson";
-import { copernicusConfigured, searchAcquisitions } from "@/lib/copernicus";
-
-const FENETRE_JOURS = 30;
-const NUAGES_MAX = 30;
+import { latestAcquisition } from "@/lib/copernicus-client";
 
 /** Dernière image Sentinel-2 en couleurs naturelles (nuages < 30 % sur la scène). */
-export default async function LatestImage({ zoneId, geom }: { zoneId: string; geom: Polygon }) {
-  if (!copernicusConfigured()) {
+export default async function LatestImage({ zoneId }: { zoneId: string }) {
+  const latest = await latestAcquisition(zoneId);
+  if (latest.status === "not_configured") {
     return <p className="muted">Images satellite indisponibles : identifiants Copernicus non configurés.</p>;
   }
-  let acq;
-  try {
-    const to = new Date();
-    const from = new Date(to.getTime() - FENETRE_JOURS * 864e5);
-    [acq] = await searchAcquisitions(geom, { collection: "sentinel-2-l2a", from, to, maxCloud: NUAGES_MAX, limit: 5 });
-  } catch {
+  if (latest.status === "error") {
     return <p className="muted">Impossible de joindre Copernicus pour le moment.</p>;
   }
+  const acq = latest.acquisition;
   if (!acq) {
-    return <p className="muted">Aucune image Sentinel-2 peu nuageuse sur les {FENETRE_JOURS} derniers jours.</p>;
+    return <p className="muted">Aucune image Sentinel-2 peu nuageuse sur les {latest.fenetreJours} derniers jours.</p>;
   }
   const day = acq.datetime.slice(0, 10);
   return (

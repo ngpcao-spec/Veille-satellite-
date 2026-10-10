@@ -1,16 +1,14 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import type { Polygon } from "geojson";
-import { getToken, resetTokenCache, searchAcquisitions, trueColorImage } from "../lib/copernicus";
-import { imageSize, polygonBBox } from "../lib/geo";
+import { getToken, resetTokenCache, searchAcquisitions, trueColorImage } from "../supabase/functions/_shared/copernicus.ts";
+import { imageSize, polygonBBox, type Polygon } from "../supabase/functions/_shared/geo.ts";
 
 const poly: Polygon = {
   type: "Polygon",
   coordinates: [[[2, 48], [2.02, 48], [2.02, 48.01], [2, 48.01], [2, 48]]],
 };
 
-process.env.COPERNICUS_CLIENT_ID = "id";
-process.env.COPERNICUS_CLIENT_SECRET = "secret";
+const creds = { clientId: "id", clientSecret: "secret" };
 
 function mockFetch(routes: Record<string, (init: RequestInit) => Response>) {
   const calls: { url: string; init: RequestInit }[] = [];
@@ -34,8 +32,8 @@ test("imageSize respecte les proportions et le côté max", () => {
 test("le jeton est mis en cache", async () => {
   resetTokenCache();
   const { f, calls } = mockFetch({ "openid-connect/token": tokenRoute });
-  assert.equal(await getToken(f), "tok");
-  assert.equal(await getToken(f), "tok");
+  assert.equal(await getToken(creds, f), "tok");
+  assert.equal(await getToken(creds, f), "tok");
   assert.equal(calls.length, 1);
 });
 
@@ -52,6 +50,7 @@ test("searchAcquisitions filtre les nuages, trie par date décroissante", async 
       }),
   });
   const res = await searchAcquisitions(
+    creds,
     poly,
     { collection: "sentinel-2-l2a", from: new Date("2026-09-10"), to: new Date("2026-10-10"), maxCloud: 30 },
     f,
@@ -68,15 +67,22 @@ test("trueColorImage envoie le polygone et la journée, renvoie le PNG", async (
     "openid-connect/token": tokenRoute,
     "/api/v1/process": () => new Response(new Uint8Array([137, 80, 78, 71])),
   });
-  const png = await trueColorImage(poly, "2026-10-06", f);
+  const png = await trueColorImage(creds, poly, "2026-10-06", f);
   assert.equal(png.byteLength, 4);
   const sent = JSON.parse(String(calls[1].init.body));
   assert.equal(sent.input.data[0].dataFilter.timeRange.from, "2026-10-06T00:00:00Z");
   assert.deepEqual(sent.input.bounds.geometry, poly);
 });
 
+test("identifiants absents : erreur explicite sans appel réseau", async () => {
+  resetTokenCache();
+  const { f, calls } = mockFetch({});
+  await assert.rejects(getToken({ clientId: "", clientSecret: "" }, f), /non configurés/);
+  assert.equal(calls.length, 0);
+});
+
 test("erreur d'authentification explicite", async () => {
   resetTokenCache();
   const { f } = mockFetch({ "openid-connect/token": () => new Response("no", { status: 401 }) });
-  await assert.rejects(getToken(f), /refusée \(401\)/);
+  await assert.rejects(getToken(creds, f), /refusée \(401\)/);
 });

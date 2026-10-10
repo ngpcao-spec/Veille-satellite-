@@ -1,4 +1,8 @@
-import type { Polygon } from "geojson";
+// Code partagé Deno (Edge Functions) / Node (tests) : pas d'API propre à l'un ou l'autre.
+export interface Polygon {
+  type: "Polygon";
+  coordinates: number[][][];
+}
 
 export type BBox = [minLon: number, minLat: number, maxLon: number, maxLat: number];
 
