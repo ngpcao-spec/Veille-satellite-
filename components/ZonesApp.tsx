@@ -1,11 +1,11 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import * as maplibregl from "maplibre-gl";
-import MapboxDraw from "@mapbox/mapbox-gl-draw";
 import area from "@turf/area";
+import kinks from "@turf/kinks";
 import type { Feature, Polygon } from "geojson";
 import { createClient } from "@/lib/supabase/client";
 import { MAX_HA, MIN_HA, TYPES_SUIVIS, type Sensibilite, type TypeSuivi, type Zone } from "@/lib/types";
@@ -21,50 +21,63 @@ function bounds(polys: Polygon[]) {
 
 export default function ZonesApp({ zones }: { zones: Zone[] }) {
   const router = useRouter();
-  const draw = useRef<MapboxDraw | null>(null);
   const { container, map } = useMap();
   const [drawing, setDrawing] = useState(false);
-  const [polygon, setPolygon] = useState<Polygon | null>(null);
+  const [finished, setFinished] = useState(false);
+  const [points, setPoints] = useState<[number, number][]>([]);
+  const drawingRef = useRef(false);
+  drawingRef.current = drawing;
   const [nom, setNom] = useState("");
   const [sensibilite, setSensibilite] = useState<Sensibilite>("normale");
   const [types, setTypes] = useState<TypeSuivi[]>(["vegetation", "eau", "construction"]);
   const [erreur, setErreur] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
 
-  const ha = polygon ? area({ type: "Feature", properties: {}, geometry: polygon }) / 10_000 : 0;
+  // Contour fermé une fois le dessin terminé
+  const polygon = useMemo<Polygon | null>(
+    () => (finished && points.length >= 3 ? { type: "Polygon", coordinates: [[...points, points[0]]] } : null),
+    [finished, points],
+  );
+  const ha =
+    points.length >= 3
+      ? area({ type: "Feature", properties: {}, geometry: { type: "Polygon", coordinates: [[...points, points[0]]] } }) / 10_000
+      : 0;
 
-  // Outil de dessin (sans contrôles par défaut : on pilote le mode nous-mêmes).
+  // Brouillon de dessin : indépendant du chargement des tuiles (pas d'outil externe)
   useEffect(() => {
     if (!map) return;
-    const d = new MapboxDraw({ displayControlsDefault: false });
-    draw.current = d;
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    map.addControl(d as any);
-    const sync = () => {
-      const feats = d.getAll().features as Feature[];
-      const last = feats[feats.length - 1];
-      setPolygon(last?.geometry?.type === "Polygon" ? (last.geometry as Polygon) : null);
+    map.addSource("draft", { type: "geojson", data: { type: "FeatureCollection", features: [] } });
+    map.addLayer({ id: "draft-fill", type: "fill", source: "draft", filter: ["==", ["geometry-type"], "Polygon"], paint: { "fill-color": "#2f9e5b", "fill-opacity": 0.25 } });
+    map.addLayer({ id: "draft-line", type: "line", source: "draft", filter: ["==", ["geometry-type"], "LineString"], paint: { "line-color": "#0b3d2e", "line-width": 3 } });
+    map.addLayer({ id: "draft-points", type: "circle", source: "draft", filter: ["==", ["geometry-type"], "Point"], paint: { "circle-radius": 6, "circle-color": "#fff", "circle-stroke-color": "#0b3d2e", "circle-stroke-width": 3 } });
+    const onClick = (e: maplibregl.MapMouseEvent) => {
+      if (!drawingRef.current) return;
+      setPoints((p) => [...p, [e.lngLat.lng, e.lngLat.lat]]);
     };
-    const onCreate = () => {
-      // un seul polygone à la fois
-      const feats = d.getAll().features;
-      feats.slice(0, -1).forEach((f) => f.id && d.delete(String(f.id)));
-      setDrawing(false);
-      sync();
-    };
-    // les évènements draw.* ne sont pas dans les types de MapLibre
-    const m = map as unknown as { on: (t: string, f: () => void) => void; off: (t: string, f: () => void) => void };
-    m.on("draw.create", onCreate);
-    m.on("draw.update", sync);
-    m.on("draw.delete", sync);
+    map.on("click", onClick);
     return () => {
-      m.off("draw.create", onCreate);
-      m.off("draw.update", sync);
-      m.off("draw.delete", sync);
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      map.removeControl(d as any);
+      map.off("click", onClick);
     };
   }, [map]);
+
+  useEffect(() => {
+    const src = map?.getSource("draft") as maplibregl.GeoJSONSource | undefined;
+    if (!src) return;
+    const features: Feature[] = [];
+    if (points.length >= 3) {
+      features.push({ type: "Feature", properties: {}, geometry: { type: "Polygon", coordinates: [[...points, points[0]]] } });
+    }
+    if (points.length >= 2) {
+      const line = finished || points.length >= 3 ? [...points, points[0]] : points;
+      features.push({ type: "Feature", properties: {}, geometry: { type: "LineString", coordinates: line } });
+    }
+    points.forEach((c) => features.push({ type: "Feature", properties: {}, geometry: { type: "Point", coordinates: c } }));
+    src.setData({ type: "FeatureCollection", features });
+  }, [map, points, finished]);
+
+  useEffect(() => {
+    if (map) map.getCanvas().style.cursor = drawing ? "crosshair" : "";
+  }, [map, drawing]);
 
   // Zones existantes
   useEffect(() => {
@@ -82,9 +95,10 @@ export default function ZonesApp({ zones }: { zones: Zone[] }) {
     else {
       map.addSource("zones", { type: "geojson", data });
       const color = ["match", ["get", "etat"], "alerte", "#c93a3a", "changement", "#d98a1f", "#2f9e5b"] as never;
-      map.addLayer({ id: "zones-fill", type: "fill", source: "zones", paint: { "fill-color": color, "fill-opacity": 0.2 } });
-      map.addLayer({ id: "zones-line", type: "line", source: "zones", paint: { "line-color": color, "line-width": 2 } });
+      map.addLayer({ id: "zones-fill", type: "fill", source: "zones", paint: { "fill-color": color, "fill-opacity": 0.2 } }, "draft-fill");
+      map.addLayer({ id: "zones-line", type: "line", source: "zones", paint: { "line-color": color, "line-width": 2 } }, "draft-fill");
       map.on("click", "zones-fill", (e: maplibregl.MapLayerMouseEvent) => {
+        if (drawingRef.current) return;
         const id = e.features?.[0]?.properties?.id;
         if (id) router.push(`/zones/${id}`);
       });
@@ -102,18 +116,32 @@ export default function ZonesApp({ zones }: { zones: Zone[] }) {
   }, [map, zones]);
 
   function startDrawing() {
-    draw.current?.deleteAll();
-    setPolygon(null);
+    setPoints([]);
+    setFinished(false);
     setErreur(null);
     setDrawing(true);
-    draw.current?.changeMode("draw_polygon");
+  }
+
+  function undoPoint() {
+    setPoints((p) => p.slice(0, -1));
+  }
+
+  function finishDrawing() {
+    if (points.length < 3) return;
+    const ring: Polygon = { type: "Polygon", coordinates: [[...points, points[0]]] };
+    if (kinks({ type: "Feature", properties: {}, geometry: ring }).features.length > 0) {
+      setErreur("Le contour se croise : retirez le dernier point ou recommencez.");
+      return;
+    }
+    setErreur(null);
+    setDrawing(false);
+    setFinished(true);
   }
 
   function cancel() {
-    draw.current?.deleteAll();
-    draw.current?.changeMode("simple_select");
-    setPolygon(null);
+    setPoints([]);
     setDrawing(false);
+    setFinished(false);
     setErreur(null);
   }
 
@@ -195,9 +223,13 @@ export default function ZonesApp({ zones }: { zones: Zone[] }) {
           </form>
         ) : drawing ? (
           <div className="card">
-            Cliquez sur la carte pour placer les sommets ; double-clic pour terminer.
-            <div className="row" style={{ marginTop: 8 }}>
+            Touchez la carte pour placer chaque sommet de la zone ({points.length} point{points.length > 1 ? "s" : ""}
+            {points.length >= 3 ? ` · ${ha.toFixed(ha < 10 ? 2 : 0)} ha` : ""}). Il en faut au moins 3.
+            {erreur && <div className="error">{erreur}</div>}
+            <div className="row" style={{ marginTop: 8, flexWrap: "wrap" }}>
               <button className="btn" onClick={cancel}>Annuler</button>
+              <button className="btn" onClick={undoPoint} disabled={points.length === 0}>Retirer le dernier</button>
+              <button className="btn primary" onClick={finishDrawing} disabled={points.length < 3}>Terminer</button>
             </div>
           </div>
         ) : (
