@@ -4,6 +4,14 @@ export interface Polygon {
   coordinates: number[][][];
 }
 
+/**
+ * Contour GeoJSON « nu » (type + coordonnées). PostgREST ajoute un membre `crs` aux géométries PostGIS,
+ * que Copernicus refuse (« Field 'intersects.crs' is not supported »).
+ */
+export function cleanPolygon(p: Polygon): Polygon {
+  return { type: "Polygon", coordinates: p.coordinates };
+}
+
 export type BBox = [minLon: number, minLat: number, maxLon: number, maxLat: number];
 
 export function polygonBBox(p: Polygon): BBox {
