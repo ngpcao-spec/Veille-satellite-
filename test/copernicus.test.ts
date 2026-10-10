@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { getToken, resetTokenCache, searchAcquisitions, trueColorImage } from "../supabase/functions/_shared/copernicus.ts";
-import { imageSize, polygonBBox, type Polygon } from "../supabase/functions/_shared/geo.ts";
+import { cleanPolygon, imageSize, polygonBBox, type Polygon } from "../supabase/functions/_shared/geo.ts";
 
 const poly: Polygon = {
   type: "Polygon",
@@ -98,4 +98,30 @@ test("erreur d'authentification explicite", async () => {
   resetTokenCache();
   const { f } = mockFetch({ "openid-connect/token": () => new Response("no", { status: 401 }) });
   await assert.rejects(getToken(creds, f), /refusée \(401\)/);
+});
+
+const withCrs = {
+  ...poly,
+  crs: { type: "name", properties: { name: "EPSG:4326" } },
+} as unknown as Polygon;
+
+test("cleanPolygon retire le membre crs ajouté par PostgREST", () => {
+  const clean = cleanPolygon(withCrs);
+  assert.deepEqual(Object.keys(clean).sort(), ["coordinates", "type"]);
+  assert.deepEqual(clean.coordinates, poly.coordinates);
+});
+
+test("Catalog et Process n'envoient jamais de crs dans la géométrie", async () => {
+  resetTokenCache();
+  const { f, calls } = mockFetch({
+    "openid-connect/token": tokenRoute,
+    "catalog/1.0.0/search": () => json({ features: [] }),
+    "/api/v1/process": () => new Response(new Uint8Array([1])),
+  });
+  await searchAcquisitions(creds, withCrs, { collection: "sentinel-2-l2a", from: new Date(), to: new Date() }, f);
+  await trueColorImage(creds, withCrs, "2026-10-06", f);
+  const catalog = JSON.parse(String(calls[1].init.body));
+  const process_ = JSON.parse(String(calls[2].init.body));
+  assert.equal("crs" in catalog.intersects, false);
+  assert.equal("crs" in process_.input.bounds.geometry, false);
 });

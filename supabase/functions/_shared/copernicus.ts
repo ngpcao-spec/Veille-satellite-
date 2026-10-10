@@ -1,4 +1,4 @@
-import { imageSize, polygonBBox, type Polygon } from "./geo.ts";
+import { cleanPolygon, imageSize, polygonBBox, type Polygon } from "./geo.ts";
 
 const TOKEN_URL = "https://identity.dataspace.copernicus.eu/auth/realms/CDSE/protocol/openid-connect/token";
 const CATALOG_URL = "https://sh.dataspace.copernicus.eu/api/v1/catalog/1.0.0/search";
@@ -71,7 +71,7 @@ export async function searchAcquisitions(
   const body: Record<string, unknown> = {
     collections: [opts.collection],
     datetime: `${rfc3339(opts.from)}/${rfc3339(opts.to)}`,
-    intersects: geom,
+    intersects: cleanPolygon(geom),
     limit: opts.limit ?? 20,
   };
   if (optical && opts.maxCloud !== undefined) {
@@ -119,7 +119,7 @@ export async function trueColorImage(
     headers: { "Content-Type": "application/json", Accept: "image/png", Authorization: `Bearer ${token}` },
     body: JSON.stringify({
       input: {
-        bounds: { geometry: geom, properties: { crs: "http://www.opengis.net/def/crs/EPSG/0/4326" } },
+        bounds: { geometry: cleanPolygon(geom), properties: { crs: "http://www.opengis.net/def/crs/EPSG/0/4326" } },
         data: [
           {
             type: "sentinel-2-l2a",
