@@ -4,7 +4,9 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
+    "predev": "node scripts/copy-maplibre-worker.mjs",
     "build": "next build",
+    "prebuild": "node scripts/copy-maplibre-worker.mjs",
     "start": "next start",
     "lint": "tsc --noEmit",
     "test": "tsx --test test/*.test.ts"
