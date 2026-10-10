@@ -58,6 +58,9 @@ Deno.serve(async (req: Request) => {
     return json({ error: "unknown_action" }, 400);
   } catch (e) {
     const status = e instanceof CopernicusError && e.status === 429 ? 429 : 502;
-    return json({ error: "copernicus_unavailable" }, status);
+    // Le détail ne contient que le service et le code HTTP (jamais d'identifiants).
+    const detail = e instanceof CopernicusError ? e.message : "erreur inattendue";
+    console.error("copernicus", body.action, detail);
+    return json({ error: "copernicus_unavailable", detail }, status);
   }
 });

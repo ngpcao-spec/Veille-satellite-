@@ -7,7 +7,13 @@ export default async function LatestImage({ zoneId }: { zoneId: string }) {
     return <p className="muted">Images satellite indisponibles : identifiants Copernicus non configurés.</p>;
   }
   if (latest.status === "error") {
-    return <p className="muted">Impossible de joindre Copernicus pour le moment.</p>;
+    return (
+      <p className="muted">
+        Impossible de joindre Copernicus pour le moment.
+        <br />
+        <small>Détail technique : {latest.detail}</small>
+      </p>
+    );
   }
   const acq = latest.acquisition;
   if (!acq) {
