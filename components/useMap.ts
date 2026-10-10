@@ -27,6 +27,8 @@ export function useMap(onReady?: (map: maplibregl.Map) => void) {
 
   useEffect(() => {
     if (!container.current) return;
+    // Worker servi par le site (copié dans /public avant le build) : voir scripts/copy-maplibre-worker.mjs
+    maplibregl.setWorkerUrl("/maplibre/maplibre-gl-worker.mjs");
     const m = new maplibregl.Map({
       container: container.current,
       style: BASE_STYLE,
