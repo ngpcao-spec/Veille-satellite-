@@ -127,6 +127,8 @@ export async function trueColorImage(
               timeRange: { from: `${day}T00:00:00Z`, to: `${day}T23:59:59Z` },
               mosaickingOrder: "leastCC",
             },
+            // Pixels de 10 m agrandis : interpolation douce plutôt que gros carrés (NEAREST par défaut).
+            processing: { upsampling: "BICUBIC", downsampling: "BICUBIC" },
           },
         ],
       },

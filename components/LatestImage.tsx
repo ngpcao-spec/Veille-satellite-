@@ -1,5 +1,8 @@
 import { latestAcquisition } from "@/lib/copernicus-client";
 
+// À incrémenter quand le rendu de l'image change : l'image est mise en cache 24 h par le navigateur.
+const IMAGE_VERSION = 2;
+
 /** Dernière image Sentinel-2 en couleurs naturelles (nuages < 30 % sur la scène). */
 export default async function LatestImage({ zoneId }: { zoneId: string }) {
   const latest = await latestAcquisition(zoneId);
@@ -24,7 +27,7 @@ export default async function LatestImage({ zoneId }: { zoneId: string }) {
     <figure style={{ margin: 0 }}>
       {/* eslint-disable-next-line @next/next/no-img-element */}
       <img
-        src={`/api/zones/${zoneId}/image?date=${day}`}
+        src={`/api/zones/${zoneId}/image?date=${day}&v=${IMAGE_VERSION}`}
         alt={`Zone vue par Sentinel-2 le ${day}`}
         style={{ maxWidth: "100%", borderRadius: 12, border: "1px solid var(--line)" }}
       />
